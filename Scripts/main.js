@@ -5,14 +5,22 @@ var NodeMove = false;
 var mouseDown = false;
 var shiftDown = false;
 var lftCtlDown = false;
-var markEndPoint=true;
+var markEndPoint=false;
+var weightAssigner = false;
+var canResetNode=true;
+
+var MatVisible=false;
+
 var mousePos={x:0,y:0};
 
 const GraphNodeSize =10;
 const MaxEdgeCount = 4;
 var Nodes = [];
 var Edges =[];
+var adj_mat=[];
+
 var SelectedNodeIndex = -1;
+var LastNodeSelected = -1;
 var SelectedEdgeIndex = -1;
 var shiftSelected=[];
 
@@ -23,7 +31,8 @@ class Node
         this.x = args.x;
         this.y = args.y;
 
-        this.edges=0;
+        this.edges=undefined;
+        this.edgesSelectedIndex=[-1,-1,-1,-1];
         this.selected = false;
         this.index = -1;
 
@@ -75,17 +84,17 @@ class Node
                         {
                             return obj;
                         }
-                    }).length;
+                    });
         console.log(this.edges);
-        if(this.edges==2)
+        if(this.edges.length==2)
         {
             this.color =this.directionalColor;
         }
-        else if(this.edges>2)
+        else if(this.edges.length>2)
         {
             this.color =this.controlColor;
         }
-        else if(this.edges<2 && !this.isEndPoint)
+        else if(this.edges.length<2 && !this.isEndPoint)
         {
             this.color = this.initColor;
         }
@@ -114,7 +123,7 @@ class Node
             }
             else if(e.indexOf(i)!=-1)
             {
-                this.edgeMat.push(1);
+                this.edgeMat.push(10);
             }
             else{
                 this.edgeMat.push(0);
@@ -132,6 +141,8 @@ class Edge
         this.node_2 = N2;
 
         this.selected = false;
+        this.node_1_weight=0;
+        this.node_2_weight=0;
         this.index = -1;
 
         this.color = "#232323";
@@ -208,6 +219,165 @@ class Edge
 }
 
 
+class RadialSelector
+{
+    static Initialise()
+    {
+        RadialSelector.discBG = "#303030";
+        RadialSelector.selectorFG = "#6eb6e0";
+        RadialSelector.optionFG = "#c2c2c2";
+        RadialSelector.optionFGSelected = "#6eb6e0";
+        RadialSelector.weightAssignedColor = "#ffb756";
+        RadialSelector.TextCol = "#FEFEFE";
+        RadialSelector.options=["L","R","F","B"];
+        RadialSelector.selectedOption=undefined;
+        RadialSelector.oppositeOption=undefined;
+        RadialSelector.size = 15;
+        RadialSelector.offset = 40;
+        RadialSelector.timeElapsed=0;
+        RadialSelector.choosingEdge=false;
+        RadialSelector.edgesSelectedIndex=[-1,-1,-1,-1];
+        RadialSelector.angle =0
+    }
+
+    static GetAngle(node,point)
+    {
+        var y = point.y-node.y;
+        var x =point.x -node.x;
+        RadialSelector.angle = Math.atan2(y,x);
+    }
+
+    static Activate(node,time)
+    {
+
+        ctx.beginPath();
+        var d = Distance(Nodes[SelectedNodeIndex],mousePos)
+        if(d<GraphNodeSize)
+        {
+            ctx.fillStyle=RadialSelector.optionFGSelected;
+            canResetNode=true;
+        }
+        else
+        {
+            ctx.fillStyle=RadialSelector.optionFG;
+            canResetNode=false;
+        }
+        ctx.arc(node.x,node.y,RadialSelector.size*(RadialSelector.timeElapsed/time),0,2*Math.PI,false);
+        ctx.fill();
+        ctx.fillStyle= RadialSelector.TextCol;
+        ctx.fillText("X",node.x,node.y+3);
+        ctx.closePath();
+
+        ctx.beginPath();
+        ctx.lineWidth = 3;
+        ctx.arc(node.x,node.y,RadialSelector.size*(RadialSelector.timeElapsed/time),0,2*Math.PI,false);
+        ctx.strokeStyle = this.discBG;
+        ctx.stroke();
+        ctx.closePath();
+
+        ctx.beginPath();
+        ctx.lineWidth = 6;
+        if(!RadialSelector.choosingEdge)
+        {
+            RadialSelector.GetAngle(node,mousePos);
+        }
+        ctx.arc(node.x,node.y,RadialSelector.size*(RadialSelector.timeElapsed/time),RadialSelector.angle-(Math.PI/6),RadialSelector.angle+(Math.PI/6),false);
+        ctx.strokeStyle = this.selectorFG;
+        ctx.stroke();
+        ctx.closePath();
+        var a = RadialSelector.angle*180/Math.PI;
+        if(a<0)
+        {
+            a+=360;
+        }
+        if(((a>345&&a<360)||(a>=0 && a<15)) && d>GraphNodeSize)
+        {
+            RadialSelector.selectedOption = RadialSelector.options[1];
+            RadialSelector.oppositeOption = RadialSelector.options[0];
+        }
+        else if((a>165 && a<195)&& d>GraphNodeSize)
+        {
+            RadialSelector.selectedOption = RadialSelector.options[0];
+            RadialSelector.oppositeOption = RadialSelector.options[1];
+        }
+        else if((a>255 && a<285)&& d>GraphNodeSize)
+        {
+            RadialSelector.selectedOption = RadialSelector.options[2];
+            RadialSelector.oppositeOption = RadialSelector.options[3];
+        }
+        else if((a>75 && a<105)&& d>GraphNodeSize)
+        {
+            RadialSelector.selectedOption = RadialSelector.options[3];
+            RadialSelector.oppositeOption = RadialSelector.options[2];
+        }
+        else{
+            RadialSelector.selectedOption = undefined;
+            RadialSelector.oppositeOption = undefined;
+        }
+        var sel = RadialSelector.selectedOption;
+
+
+        ctx.beginPath();
+        if(node.edgesSelectedIndex[1]==-1)
+        {
+            ctx.fillStyle = sel==RadialSelector.options[1] ? RadialSelector.optionFGSelected:RadialSelector.optionFG;
+        }
+        else{
+            ctx.fillStyle = RadialSelector.weightAssignedColor;
+        }
+        ctx.arc(node.x + RadialSelector.offset*(RadialSelector.timeElapsed/time),node.y,0.75*RadialSelector.size,0,2*Math.PI,false);
+        ctx.fill();
+        ctx.fillStyle = RadialSelector.TextCol;
+        ctx.fillText(RadialSelector.options[1],node.x + RadialSelector.offset*(RadialSelector.timeElapsed/time),node.y+2);
+        ctx.closePath();
+
+        ctx.beginPath();
+        if(node.edgesSelectedIndex[0]==-1)
+        {
+            ctx.fillStyle = sel==RadialSelector.options[0] ? RadialSelector.optionFGSelected:RadialSelector.optionFG;
+        }
+        else{
+            ctx.fillStyle = RadialSelector.weightAssignedColor;
+        }
+        ctx.arc(node.x - RadialSelector.offset*(RadialSelector.timeElapsed/time),node.y,0.75*RadialSelector.size,0,2*Math.PI,false);
+        ctx.fill();
+        ctx.fillStyle = RadialSelector.TextCol;
+        ctx.fillText(RadialSelector.options[0],node.x - RadialSelector.offset*(RadialSelector.timeElapsed/time),node.y+2);
+        ctx.closePath();
+
+        ctx.beginPath();
+        if(node.edgesSelectedIndex[2]==-1)
+        {
+            ctx.fillStyle = sel==RadialSelector.options[2] ? RadialSelector.optionFGSelected:RadialSelector.optionFG;
+        }
+        else{
+            ctx.fillStyle = RadialSelector.weightAssignedColor;
+        }
+        ctx.arc(node.x,node.y - RadialSelector.offset*(RadialSelector.timeElapsed/time),0.75*RadialSelector.size,0,2*Math.PI,false);
+        ctx.fill();
+        ctx.fillStyle = RadialSelector.TextCol;
+        ctx.fillText(RadialSelector.options[2],node.x,node.y+2- RadialSelector.offset*(RadialSelector.timeElapsed/time));
+        ctx.closePath();
+
+        ctx.beginPath();
+        if(node.edgesSelectedIndex[3]==-1)
+        {
+            ctx.fillStyle = sel==RadialSelector.options[3] ? RadialSelector.optionFGSelected:RadialSelector.optionFG;
+        }
+        else{
+            ctx.fillStyle = RadialSelector.weightAssignedColor;
+        }
+        ctx.arc(node.x,node.y + RadialSelector.offset*(RadialSelector.timeElapsed/time),0.75*RadialSelector.size,0,2*Math.PI,false);
+        ctx.fill();
+        ctx.fillStyle = RadialSelector.TextCol;
+        ctx.fillText(RadialSelector.options[3],node.x,node.y+2+RadialSelector.offset*(RadialSelector.timeElapsed/time));
+        ctx.closePath();
+        if(RadialSelector.timeElapsed<time)
+            RadialSelector.timeElapsed++;
+    }
+}
+
+
 function Distance(p1,p2)
 {
     var x =p2.x - p1.x;
@@ -227,12 +397,10 @@ function createNode()
 
 function CheckSelected()
 {
-    if(!NodeMove)
+    if(!NodeMove && !weightAssigner || RadialSelector.choosingEdge)
     {
         var once = false;
-        SelectedNodeIndex = -1;
         SelectedEdgeIndex = -1;
-        
         for(let i=0;i<Edges.length;i++)
         {
             var dst = Edges[i].DistanceToPoint(mousePos);
@@ -246,17 +414,20 @@ function CheckSelected()
                 Edges[i].selected = false;
             }
         }
-        
-        for (let i = 0; i < Nodes.length; i++) {
-            if(Distance(Nodes[i],mousePos)<GraphNodeSize+5 && !once)
-            {
-                Nodes[i].selected = true;
-                SelectedNodeIndex = i;
-                once = true;
-            }
-            else{
-                if(shiftSelected.indexOf(i)==-1)
-                    Nodes[i].selected = false;
+        if(!RadialSelector.choosingEdge)
+        {
+            SelectedNodeIndex = -1;
+            for (let i = 0; i < Nodes.length; i++) {
+                if(Distance(Nodes[i],mousePos)<GraphNodeSize+5 && !once)
+                {
+                    Nodes[i].selected = true;
+                    SelectedNodeIndex = i;
+                    once = true;
+                }
+                else{
+                    if(shiftSelected.indexOf(i)==-1)
+                        Nodes[i].selected = false;
+                }
             }
         }
     }
@@ -317,17 +488,56 @@ function RecalculateIndex()
     {
         Edges[i].setIndex(i);
     }
-
-
+    AdjecencyMat();
+    if(MatVisible)
+        ShowAdjecencyMat();
 }
 
-function AdjecencyMat()
+function ResetNode(Selectedindex)
 {
-    var mat=[];
-    for (let i = 0; i < Nodes.length; i++) {
-        mat.push(Nodes[i].GetEdgeMat());
+    console.log(Selectedindex);
+    var arr = Nodes[Selectedindex].edgesSelectedIndex;
+    console.log(arr);
+    for(let i =0;i<arr.length;i++)
+    {
+        if(arr[i] != -1)
+        {
+            Edges[arr[i]].node_1_weight=0;
+            Edges[arr[i]].node_2_weight=0;
+            if(Edges[arr[i]].node_1 == Nodes[Selectedindex])
+            {
+                var index = Edges[arr[i]].node_2.edgesSelectedIndex.indexOf(arr[i]);
+                Edges[arr[i]].node_2.edgesSelectedIndex[index] = -1;
+            }
+            else{
+                var index = Edges[arr[i]].node_1.edgesSelectedIndex.indexOf(arr[i]);
+                Edges[arr[i]].node_1.edgesSelectedIndex[index] = -1;
+            }
+
+            var a = Edges[arr[i]].node_1.index;
+            var b = Edges[arr[i]].node_2.index;
+            adj_mat[a][b]=10;
+            adj_mat[b][a]=10;
+        }
     }
-    //console.log(mat);
+    Nodes[Selectedindex].edgesSelectedIndex = [-1,-1,-1,-1];
+    arr = Nodes[Selectedindex].edgesSelectedIndex;
+    console.log(arr);
+}
+
+
+
+function ResetEdges()
+{
+    for (let i = 0; i < Nodes.length; i++) {
+        ResetNode(i);
+    }
+    AdjecencyMat();
+    ShowAdjecencyMat();
+}
+
+function ShowAdjecencyMat()
+{
     $("table").empty();
     var markUp = "<tr><th></th>";
     for(let i=0;i<Nodes.length;i++)
@@ -335,21 +545,41 @@ function AdjecencyMat()
         markUp+="<th>N"+(i+1)+"</th>";
     }
     markUp+="</tr>";
-    for (let x = 0; x < mat.length; x++) {
+    for (let x = 0; x < adj_mat.length; x++) {
         markUp+="<tr><th>N"+(x+1)+"</th>"
-        for( let y=0;y<mat[x].length;y++)
+        for( let y=0;y<adj_mat[x].length;y++)
         {
-            markUp+="<td>"+mat[x][y]+"</td>";
+            markUp+="<td>"+adj_mat[x][y]+"</td>";
         }
         markUp+="</tr>";
     }
     $("table").append(markUp);
 }
 
+
+function AdjecencyMat()
+{
+    adj_mat=[];
+    for (let i = 0; i < Nodes.length; i++) {
+        adj_mat.push(Nodes[i].GetEdgeMat());
+    }
+}
+
+function AdjecencyMatButton()
+{
+    if(adj_mat.length==0)
+    {
+        AdjecencyMat();
+    }
+    ShowAdjecencyMat();
+    MatVisible=true;
+}
+
 window.addEventListener('keydown',doKeyDown,true);
 window.addEventListener('keyup',doKeyUp,true);
 
 $(document).ready(function () {
+    RadialSelector.Initialise();
     canvas.addEventListener('mousemove', function(evt) {
         mousePos = getMousePos(canvas, evt);
         CheckSelected();
@@ -361,6 +591,107 @@ $(document).ready(function () {
         if(SelectedNodeIndex == -1 && SelectedEdgeIndex == -1)
         {
             createNode();
+            AdjecencyMat();
+            if(MatVisible)
+                ShowAdjecencyMat();
+            CheckSelected();
+        }
+        else if(weightAssigner)
+        {
+            if(RadialSelector.selectedOption!=undefined && !RadialSelector.choosingEdge)
+            {
+                console.log("choose an edge");
+                RadialSelector.choosingEdge=true;
+            }
+            else if(RadialSelector.choosingEdge && SelectedEdgeIndex!=-1)
+            {
+                if(Edges[SelectedEdgeIndex].node_1 == Nodes[SelectedNodeIndex])
+                {
+                    console.log("Edge Selected for ("+RadialSelector.selectedOption +"): " + SelectedEdgeIndex);
+                    Edges[SelectedEdgeIndex].node_1.edgesSelectedIndex[RadialSelector.options.indexOf(RadialSelector.selectedOption)] = SelectedEdgeIndex;
+                    Edges[SelectedEdgeIndex].node_2.edgesSelectedIndex[RadialSelector.options.indexOf(RadialSelector.oppositeOption)] = SelectedEdgeIndex;
+                    switch(RadialSelector.options.indexOf(RadialSelector.selectedOption))
+                    {
+                        case 0:
+                        {
+                            Edges[SelectedEdgeIndex].node_1_weight = -1;
+                            Edges[SelectedEdgeIndex].node_2_weight = 1;
+                            break;
+                        }
+                        case 1:
+                        {
+                            Edges[SelectedEdgeIndex].node_1_weight = 1;
+                            Edges[SelectedEdgeIndex].node_2_weight = -1;
+                            break;
+                        }
+                        case 2:
+                        {
+                            Edges[SelectedEdgeIndex].node_1_weight = 2;
+                            Edges[SelectedEdgeIndex].node_2_weight = -2;
+                            break;
+                        }
+                        case 3:
+                        {
+                            Edges[SelectedEdgeIndex].node_1_weight = -2;
+                            Edges[SelectedEdgeIndex].node_2_weight = 2;
+                            break;
+                        }
+                    }
+                    var i=Edges[SelectedEdgeIndex].node_1.index;
+                    var j=Edges[SelectedEdgeIndex].node_2.index;
+                    adj_mat[i][j] = Edges[SelectedEdgeIndex].node_1_weight;
+                    adj_mat[j][i] = Edges[SelectedEdgeIndex].node_2_weight;
+                    ShowAdjecencyMat();
+                }
+                else if(Edges[SelectedEdgeIndex].node_2 == Nodes[SelectedNodeIndex])
+                {
+                    Edges[SelectedEdgeIndex].node_2.edgesSelectedIndex[RadialSelector.options.indexOf(RadialSelector.selectedOption)] = SelectedEdgeIndex;
+                    Edges[SelectedEdgeIndex].node_1.edgesSelectedIndex[RadialSelector.options.indexOf(RadialSelector.oppositeOption)] = SelectedEdgeIndex;
+                    switch(RadialSelector.options.indexOf(RadialSelector.selectedOption))
+                    {
+                        case 0:
+                        {
+                            Edges[SelectedEdgeIndex].node_1_weight = 1;
+                            Edges[SelectedEdgeIndex].node_2_weight = -1;
+                            break;
+                        }
+                        case 1:
+                        {
+                            Edges[SelectedEdgeIndex].node_1_weight = -1;
+                            Edges[SelectedEdgeIndex].node_2_weight = 1;
+                            break;
+                        }
+                        case 2:
+                        {
+                            Edges[SelectedEdgeIndex].node_1_weight = -2;
+                            Edges[SelectedEdgeIndex].node_2_weight = 2;
+                            break;
+                        }
+                        case 3:
+                        {
+                            Edges[SelectedEdgeIndex].node_1_weight = 2;
+                            Edges[SelectedEdgeIndex].node_2_weight = -2;
+                            break;
+                        }
+                    }
+                    var i=Edges[SelectedEdgeIndex].node_1.index;
+                    var j=Edges[SelectedEdgeIndex].node_2.index;
+                    adj_mat[i][j] = Edges[SelectedEdgeIndex].node_1_weight;
+                    adj_mat[j][i] = Edges[SelectedEdgeIndex].node_2_weight;
+                    ShowAdjecencyMat();
+                }
+                else{
+                    console.error("Selected edge does not have the selected node as one of its endpoints");
+                }
+                RadialSelector.choosingEdge=false;
+                CheckSelected();
+            }
+            else if(canResetNode)
+            {
+                console.log("resetNode");
+                ResetNode(SelectedNodeIndex);
+                ShowAdjecencyMat();
+            }
         }
         else if(lftCtlDown && SelectedNodeIndex != -1)
         {
@@ -375,9 +706,9 @@ $(document).ready(function () {
             
             shiftSelected.push(SelectedNodeIndex);
             //console.log(shiftSelected);
-            if(shiftSelected.length==2)
+            if(shiftSelected.length==2 && shiftSelected[0]!= shiftSelected[1])
             {
-                if(Nodes[shiftSelected[0]].GetEdges()<MaxEdgeCount && Nodes[shiftSelected[1]].GetEdges()<MaxEdgeCount)
+                if(Nodes[shiftSelected[0]].GetEdges().length<MaxEdgeCount && Nodes[shiftSelected[1]].GetEdges().length<MaxEdgeCount)
                 {
                     var e = new Edge(Nodes[shiftSelected[0]],Nodes[shiftSelected[1]]);
                     if(Edges.filter((obj)=>{
@@ -395,6 +726,9 @@ $(document).ready(function () {
                         e.setIndex(Edges.length-1);
                         Nodes[shiftSelected[0]].GetEdges();
                         Nodes[shiftSelected[1]].GetEdges();
+                        AdjecencyMat();
+                        if(MatVisible)
+                            ShowAdjecencyMat();
                     }
                     shiftSelected=[];
                     CheckSelected();
@@ -404,7 +738,6 @@ $(document).ready(function () {
         }
         else if(markEndPoint && SelectedNodeIndex!=-1)
         {
-            console.log("toggle endPoint");
             Nodes[SelectedNodeIndex].setEndPoint();
         }
     });
@@ -441,11 +774,18 @@ function doKeyUp(e) {
     {
         markEndPoint =false;
     }
+
+    if(code ==87)
+    {
+        weightAssigner = false;
+        CheckSelected();
+        RadialSelector.timeElapsed = 0;
+        RadialSelector.choosingEdge = false;
+    }
 }
 
 function doKeyDown(e) {
     var code = e.keyCode;
-    console.log(code);
 	if(code == 16)
 	{
 		shiftDown = true;
@@ -460,6 +800,10 @@ function doKeyDown(e) {
     {
         markEndPoint =true;
     }
+    if(code ==87)
+    {
+        weightAssigner = true;
+    }
 }
 
 function getMousePos(canvas, evt) {
@@ -472,12 +816,12 @@ function getMousePos(canvas, evt) {
 
 function Update()
 {
-    if(SelectedNodeIndex!= -1 && mouseDown && !shiftDown && !lftCtlDown && !markEndPoint)
+    if(SelectedNodeIndex!= -1 && mouseDown && !shiftDown && 
+        !lftCtlDown && !markEndPoint & !weightAssigner)
     {
         NodeMove = true;
         MovePoint(SelectedNodeIndex,mousePos);
     }
-
     ctx.clearRect(0,0,canvas.clientWidth,canvas.height);
     for(let i=0;i<Edges.length;i++)
     {
@@ -486,6 +830,13 @@ function Update()
     for (let i = 0; i < Nodes.length; i++) {
         Nodes[i].draw();
     }
-
+    if(weightAssigner && SelectedNodeIndex != -1 || RadialSelector.choosingEdge)
+    {
+        if(adj_mat.length==0)
+        {
+            AdjecencyMat();
+        }
+        RadialSelector.Activate(Nodes[SelectedNodeIndex],10);
+    }
     window.requestAnimationFrame(Update);
 }
