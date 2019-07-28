@@ -840,3 +840,10 @@ function Update()
     }
     window.requestAnimationFrame(Update);
 }
+
+function Download()
+{
+    $("#downloadContainer").empty();
+    var data = "text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(adj_mat));
+    $('<a href="data:' + data + '" download="data.json">download JSON</a>').appendTo('#downloadContainer');
+}
