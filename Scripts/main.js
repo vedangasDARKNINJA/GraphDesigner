@@ -1,5 +1,9 @@
 var canvas = document.getElementById("myCanvas");
 var ctx = canvas.getContext("2d");
+var snap = false;
+
+var gridScale=10;
+
 
 var NodeMove = false;
 var mouseDown = false;
@@ -8,7 +12,6 @@ var lftCtlDown = false;
 var markEndPoint=false;
 var weightAssigner = false;
 var canResetNode=true;
-
 var MatVisible=false;
 
 var mousePos={x:0,y:0};
@@ -24,6 +27,14 @@ var LastNodeSelected = -1;
 var SelectedEdgeIndex = -1;
 var shiftSelected=[];
 
+var currentOrigin={x:0,y:0};
+var originAtNode=false;
+var scaleUnity = 1;
+
+
+var JSONNodes=[];
+
+
 class Node
 {
     constructor(args)
@@ -31,19 +42,28 @@ class Node
         this.x = args.x;
         this.y = args.y;
 
+        this.unityX=0;
+        this.unityY=0;
+
+        this.X_origin=0;
+        this.Y_origin=0;
+
         this.edges=undefined;
         this.edgesSelectedIndex=[-1,-1,-1,-1];
         this.selected = false;
         this.index = -1;
 
         this.isEndPoint = false;
+        this.isStartPoint= false;
 
-        this.color = "#878787";
-        this.initColor = "#878787";
+        this.color = "#656565";
+        this.initColor = "#656565";
         this.selectedColor = "#ffe573";
         this.directionalColor="#329c6f";
         this.controlColor = "#f74f4f";
-        this.endPointColor="#232323";
+        this.endPointColor="#f598ce";
+        this.startPointColor="#98ebf5";
+        this.textCol = "#ffffff";
     }
     setIndex(i)
     {
@@ -52,18 +72,48 @@ class Node
 
     setEndPoint()
     {
+        if(adj_mat.length==0)
+        {
+            AdjecencyMat();
+        }
         if(this.isEndPoint)
         {
             this.isEndPoint = false;
             this.color = this.initColor;
-            this.GetEdges();
+            adj_mat[SelectedNodeIndex][SelectedNodeIndex]=0;
         }
         else
         {
             this.isEndPoint = true;
+            this.isStartPoint = false;
             this.color = this.endPointColor;
+            adj_mat[SelectedNodeIndex][SelectedNodeIndex]=100;
         }
+        ShowAdjecencyMat();
     }
+
+    setStartPoint()
+    {
+        if(adj_mat.length==0)
+        {
+            AdjecencyMat();
+        }
+        if(this.isStartPoint)
+        {
+            this.isStartPoint = false;
+            this.color = this.initColor;
+            adj_mat[SelectedNodeIndex][SelectedNodeIndex]=0;
+        }
+        else
+        {
+            this.isStartPoint= true;
+            this.isEndPoint = false;
+            this.color = this.startPointColor;
+            adj_mat[SelectedNodeIndex][SelectedNodeIndex]=-100;
+        }
+        ShowAdjecencyMat();
+    }
+
     draw()
     {
         ctx.font = "12px Arial";
@@ -72,7 +122,7 @@ class Node
         ctx.fillStyle = this.selected?this.selectedColor:this.color;
         ctx.arc(this.x,this.y,GraphNodeSize,0,2*Math.PI,false);
         ctx.fill();
-        ctx.fillStyle="#000000";
+        ctx.fillStyle=this.textCol;
         ctx.fillText(this.index+1,this.x,this.y+5);
         ctx.closePath();
     }
@@ -85,7 +135,6 @@ class Node
                             return obj;
                         }
                     });
-        console.log(this.edges);
         if(this.edges.length==2)
         {
             this.color =this.directionalColor;
@@ -387,6 +436,10 @@ function Distance(p1,p2)
 
 function createNode()
 {
+    if(snap)
+    {
+        NearestPoint();
+    }
     var obj = new Node({x:mousePos.x,y:mousePos.y});
     if(Nodes.indexOf(obj)==-1)
     {
@@ -433,12 +486,15 @@ function CheckSelected()
     }
 }
 
-function MovePoint(index,Position)
+function MovePoint(index)
 {
-    Nodes[index].x = Position.x;
-    Nodes[index].y = Position.y;
+    if(snap)
+    {
+        NearestPoint();
+    }
+    Nodes[index].x = mousePos.x;
+    Nodes[index].y = mousePos.y;
 }
-
 
 function AssociatedEdgesRemove(node)
 {
@@ -534,6 +590,10 @@ function ResetEdges()
     }
     AdjecencyMat();
     ShowAdjecencyMat();
+    if(!MatVisible)
+    {
+        MatVisible=true;
+    }
 }
 
 function ShowAdjecencyMat()
@@ -575,10 +635,182 @@ function AdjecencyMatButton()
     MatVisible=true;
 }
 
+function ChangeOrigin()
+{
+    if(parseInt($("#originSelect").val())==0)
+    {
+        originAtNode = false;
+    }
+    else if(parseInt($("#originSelect").val())==1)
+    {
+        originAtNode = true;
+    }
+}
+
+function SetUnityCoordinates()
+{
+    if(Nodes.length>0)
+    {
+        for(let i=0;i<Nodes.length;i++)
+        {
+            if(currentOrigin.x!=0 && currentOrigin.y!=0)
+            {
+                Nodes[i].unityX= scaleUnity*Nodes[i].X_origin/gridScale;
+                Nodes[i].unityY= scaleUnity*Nodes[i].Y_origin/gridScale;
+
+                //console.log({x:Nodes[i].unityX,y:Nodes[i].unityY});
+            }
+        }
+    }
+}
+
+function getRelativePoints()
+{
+    if(Nodes.length>0)
+    {
+        for(let i=0;i<Nodes.length;i++)
+        {
+            if(currentOrigin.x!=0 && currentOrigin.y!=0)
+            {
+                Nodes[i].X_origin = Nodes[i].x - currentOrigin.x;
+                Nodes[i].Y_origin = currentOrigin.y -Nodes[i].y;
+            }
+        }
+    }
+}
+
+function CreateJSONObject()
+{
+    JSONNodes=[];
+    for (let i = 0; i < Nodes.length; i++) {
+        JSONNodes.push({x:Nodes[i].unityX,z:Nodes[i].unityY,edges:Nodes[i].edgeMat});
+    }
+    console.log(JSON.stringify(JSONNodes));
+}
+
+
 window.addEventListener('keydown',doKeyDown,true);
 window.addEventListener('keyup',doKeyUp,true);
+$(document).on('change','#originSelect',ChangeOrigin);
+
+
+function drawGrid()
+{
+    ctx.strokeStyle ="#9b9b9b";
+    ctx.lineWidth = 1;
+    for (let i = 0; i < canvas.width; i+=gridScale) {
+        ctx.beginPath();
+        ctx.moveTo(i,0);
+        ctx.lineTo(i,canvas.height);
+        ctx.stroke();
+        ctx.closePath();
+    }
+    for (let i = 0; i < canvas.height; i+=gridScale) {
+        ctx.beginPath();
+        ctx.moveTo(0,i);
+        ctx.lineTo(canvas.width,i);
+        ctx.stroke();
+        ctx.closePath();
+    }
+}
+
+function NearestPoint()
+{
+    var x = mousePos.x%gridScale;
+    var y = mousePos.y%gridScale;
+
+    if(x>gridScale*0.5)
+    {
+        x = Math.ceil(mousePos.x/gridScale) * gridScale;
+    }
+    else
+    {
+        x = Math.floor(mousePos.x/gridScale) * gridScale;
+    }
+
+    if(y>gridScale*0.5)
+    {
+        y = Math.ceil(mousePos.y/gridScale) * gridScale;
+    }
+    else
+    {
+        y = Math.floor(mousePos.y/gridScale) * gridScale;
+    }
+    mousePos.x = x;
+    mousePos.y = y;
+    if(!shiftDown && !lftCtlDown && !weightAssigner && !markEndPoint)
+    {
+        ctx.fillStyle="#808080";
+        ctx.beginPath();
+        ctx.arc(x,y,gridScale<=GraphNodeSize?gridScale*0.5:GraphNodeSize,0,2*Math.PI,false);
+        ctx.fill();
+        ctx.closePath();
+    }
+}
+
+function DrawOrigin()
+{
+    if(originAtNode && Nodes.length>0)
+    {
+        currentOrigin.x = Nodes[0].x;
+        currentOrigin.y = Nodes[0].y;
+
+        ctx.strokeStyle="#335522";
+        ctx.beginPath();
+        ctx.moveTo(currentOrigin.x,0);
+        ctx.lineTo(currentOrigin.x,canvas.height);
+        ctx.stroke();
+        ctx.closePath();
+
+        ctx.beginPath();
+        ctx.moveTo(0,currentOrigin.y);
+        ctx.lineTo(canvas.width,currentOrigin.y);
+        ctx.stroke();
+        ctx.closePath();
+    }
+    else{
+        currentOrigin.x = canvas.width/2;
+        currentOrigin.y = canvas.height/2;
+        ctx.strokeStyle="#335522";
+        ctx.beginPath();
+        ctx.moveTo(canvas.width/2,0);
+        ctx.lineTo(canvas.width/2,canvas.height);
+        ctx.stroke();
+        ctx.closePath();
+
+        ctx.beginPath();
+        ctx.moveTo(0,canvas.height/2);
+        ctx.lineTo(canvas.width,canvas.height/2);
+        ctx.stroke();
+        ctx.closePath();
+    }
+}
 
 $(document).ready(function () {
+    $("#snap").change(function(){
+        snap = !snap;
+        if(snap)
+        {
+            $(".snap_props").append('<select name="origin_select" id="originSelect"><option value="0">Origin at canvas center</option><option value="1">Origin at Node 1</option></select>');
+            gridScale = parseInt($("#gridSlider").val())*10;
+            $("#sliderOutput").text($("#gridSlider").val());
+            $(".slidecontainer").css("display","inline-block");
+            $("#gridSlider").on('input',function(){
+                gridScale = parseInt($("#gridSlider").val())*10;
+                $("#sliderOutput").text($("#gridSlider").val());
+            });
+        }
+        else
+        {
+            $("#originSelect").remove();
+            $(".slidecontainer").css("display","none");
+        }
+    });
+
+    $("#scaleUnity").change(function(){
+        alert("setScale");
+        scaleUnity = parseInt($("#scaleUnity") .val());
+    });
     RadialSelector.Initialise();
     canvas.addEventListener('mousemove', function(evt) {
         mousePos = getMousePos(canvas, evt);
@@ -701,7 +933,7 @@ $(document).ready(function () {
         {
             RemoveEdge(SelectedEdgeIndex);
         }
-        else if(shiftDown && SelectedNodeIndex != -1)
+        else if(shiftDown && !markEndPoint && SelectedNodeIndex != -1)
         {
             
             shiftSelected.push(SelectedNodeIndex);
@@ -738,7 +970,14 @@ $(document).ready(function () {
         }
         else if(markEndPoint && SelectedNodeIndex!=-1)
         {
-            Nodes[SelectedNodeIndex].setEndPoint();
+            if(shiftDown)
+            {
+                Nodes[SelectedNodeIndex].setStartPoint();
+            }
+            else
+            {
+                Nodes[SelectedNodeIndex].setEndPoint();
+            }
         }
     });
 
@@ -754,6 +993,7 @@ function ClearAll()
 {
     Nodes = [];
     Edges = [];
+    JSONNodes=[];
 }
 
 function doKeyUp(e) {
@@ -820,9 +1060,17 @@ function Update()
         !lftCtlDown && !markEndPoint & !weightAssigner)
     {
         NodeMove = true;
-        MovePoint(SelectedNodeIndex,mousePos);
+        MovePoint(SelectedNodeIndex);
     }
     ctx.clearRect(0,0,canvas.clientWidth,canvas.height);
+    if(snap)
+    {
+        drawGrid();
+        NearestPoint();
+        DrawOrigin();
+        getRelativePoints();
+        SetUnityCoordinates();
+    }
     for(let i=0;i<Edges.length;i++)
     {
         Edges[i].draw();
@@ -841,9 +1089,30 @@ function Update()
     window.requestAnimationFrame(Update);
 }
 
+function stringify()
+{
+    var myString ="";
+    for (var i = 0; i < adj_mat.length; i++) {
+        for (var j = 0; j < adj_mat[i].length; j++) {
+            myString+=adj_mat[i][j].toString();
+            if(j<adj_mat[i].length-1)
+            {
+                myString+=",";
+            }
+        }
+        if(i<adj_mat.length-1)
+        {
+            myString+=";";
+        }
+    }
+    console.log(myString);
+    return myString;
+}
+
 function Download()
 {
     $("#downloadContainer").empty();
-    var data = "text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(adj_mat));
+    CreateJSONObject();
+    var data = "text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(JSONNodes));
     $('<a href="data:' + data + '" download="data.json">download JSON</a>').appendTo('#downloadContainer');
 }
