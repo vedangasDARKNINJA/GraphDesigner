@@ -31,6 +31,8 @@ var currentOrigin={x:0,y:0};
 var originAtNode=false;
 var scaleUnity = 1;
 
+var autoWeights=false;
+
 
 var JSONNodes=[];
 
@@ -662,6 +664,9 @@ function SetUnityCoordinates()
             }
         }
     }
+    var x = scaleUnity*(mousePos.x- currentOrigin.x) / gridScale;
+    var y = scaleUnity*(currentOrigin.y-mousePos.y)/ gridScale;
+    $("#snap_coords").html('X: '+x+' Y: ' +y);
 }
 
 function getRelativePoints()
@@ -686,6 +691,57 @@ function CreateJSONObject()
         JSONNodes.push({x:Nodes[i].unityX,z:Nodes[i].unityY,edges:Nodes[i].edgeMat});
     }
     console.log(JSON.stringify(JSONNodes));
+}
+
+function AutomaticEdges()
+{
+    AdjecencyMatButton();
+    if(snap)
+    {
+        for (var i = 0; i < Edges.length; i++)
+        {
+            getDirections(Edges[i]);
+        } 
+    }
+}
+
+function getDirections(edge)
+{
+    var i=edge.node_1.index;
+    var j=edge.node_2.index;
+
+    if(edge.node_1.x == edge.node_2.x)
+    {
+        console.log("Y direction");
+        if(edge.node_1.y>edge.node_2.y)
+        {
+            edge.node_1_weight = 2;
+            edge.node_2_weight = -2;
+        }
+        else
+        {
+            edge.node_1_weight = -2;
+            edge.node_2_weight = 2;
+        }
+    }
+    else if(edge.node_1.y == edge.node_2.y)
+    {
+        console.log("X direction");
+        if(edge.node_1.x>edge.node_2.x)
+        {
+            edge.node_1_weight = -1;
+            edge.node_2_weight = 1;
+        }
+        else
+        {
+            edge.node_1_weight = 1;
+            edge.node_2_weight = -1;
+        }
+    }
+
+    adj_mat[i][j] = edge.node_1_weight;
+    adj_mat[j][i] = edge.node_2_weight;
+    ShowAdjecencyMat();
 }
 
 
@@ -993,7 +1049,9 @@ function ClearAll()
 {
     Nodes = [];
     Edges = [];
+    adj_mat=[];
     JSONNodes=[];
+    ShowAdjecencyMat();
 }
 
 function doKeyUp(e) {
@@ -1078,7 +1136,7 @@ function Update()
     for (let i = 0; i < Nodes.length; i++) {
         Nodes[i].draw();
     }
-    if(weightAssigner && SelectedNodeIndex != -1 || RadialSelector.choosingEdge)
+    if((weightAssigner && SelectedNodeIndex != -1 || RadialSelector.choosingEdge))
     {
         if(adj_mat.length==0)
         {

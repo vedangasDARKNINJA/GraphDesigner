@@ -73,6 +73,7 @@
 <body>
     <canvas class="disable_select" id="myCanvas" width="400" height="400" style="border: 2px solid black"></canvas>
     <script type="text/javascript" src="Scripts/main.js"></script>
+    <div id="snap_coords" class="slidecontainer">X: 0 Y: 0</div>
     <br>
     <div class="snap_props disable_select">
         <label><input type="checkbox" name="snap" id="snap">Snap to grid</label>
@@ -86,15 +87,17 @@
     </div>
     <br>
     <br>
-    <button id="clearAll" onclick="ClearAll()">Clear All </button>
-    <button id="clearAll" onclick="AdjecencyMatButton()">Generate Matrix </button>
-    <button id="clearAll" onclick="ResetEdges()">Reset Edge Weights</button>
-    <button id="downloadJSON" onclick="Download()">Download JSON</button>
+    <button onclick="ClearAll()">Clear All </button>
+    <button onclick="AdjecencyMatButton()">Generate Matrix </button>
+    <button onclick="AutomaticEdges()">Automatic Edge Weights</button>
+    <button onclick="ResetEdges()">Reset Edge Weights</button>
+    <button onclick="Download()">Download JSON</button>
+    <div id="downloadContainer"></div>
     <br>
     <div>
         <table id="graphData">
         </table>
     </div>
-    <div id="downloadContainer"></div>
+    
 </body>
 </html>
